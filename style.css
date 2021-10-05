@@ -1,0 +1,29 @@
+body {
+  background-color: #112;
+  color: aliceblue;
+  font-family: Lato;
+}
+.agg-wrapper {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+.agg-div {
+  background-color: darkslateblue;
+  border: 2px solid white;
+  margin: 5px;
+  padding: 5px;
+}
+.agg-div .title {
+  font-size: 10px;
+}
+.agg-div .query {
+  font-size: 16px;
+}
+.agg-div .result {
+  font-size: 30px;
+  text-align: center;
+}
+.agg-div .counter {
+  float: right;
+  font-size: 10px;
+}
