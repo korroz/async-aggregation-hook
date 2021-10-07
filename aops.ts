@@ -77,11 +77,13 @@ interface Aggregator {
 }
 
 type AggregatorBackend = (queries: string[]) => Observable<number[]>;
-class AggregatorService implements Aggregator {
+class AggregatorService<T extends BufferControl<Observable<string>>>
+  implements Aggregator
+{
   private response$: Observable<Record<string, number>>;
   constructor(
     private readonly request$: Subject<Observable<string>>,
-    public readonly control: BufferControl<Observable<string>>,
+    public readonly control: T,
     backend: AggregatorBackend
   ) {
     this.response$ = request$.pipe(

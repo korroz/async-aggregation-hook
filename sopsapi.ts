@@ -1,6 +1,6 @@
 import { Observable, combineLatest } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { aggregatorBufferControl, aggregatorService } from './aops';
+import { aggregatorService } from './aops';
 
 //+req: -a-a-a-b-c---------
 //-req: --a-----b----------
@@ -10,9 +10,9 @@ import { aggregatorBufferControl, aggregatorService } from './aops';
 // res: ----------------ac-
 type Dict<T> = { [key: string]: T };
 
-export const executeAggregations = () => aggregatorBufferControl.flush();
-export const getCurrentControl = () => aggregatorBufferControl.mode;
-export const toggleControl = () => aggregatorBufferControl.cycleMode();
+export const executeAggregations = () => aggregatorService.control.flush();
+export const getCurrentControl = () => aggregatorService.control.mode;
+export const toggleControl = () => aggregatorService.control.cycleMode();
 
 export function aggReq(queries: string[]): Observable<number[]> {
   return aggregatorService.aggregate(queries);

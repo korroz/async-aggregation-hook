@@ -57,8 +57,8 @@ import { BufferControlMode } from './aops';
 // bufferedAndDebounced$.subscribe(console.log);
 const debounceWait = 500,
   backendLatency = 500;
-const log = (...data: any[]) =>
-  tap((value: unknown) => console.log(...data, value));
+const log = <T>(...data: any[]) =>
+  tap((value: T) => console.log(...data, value));
 
 const rng = () => Math.ceil(Math.random() * 100);
 function stubAggAjax(queries: string[]) {
