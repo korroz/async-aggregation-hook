@@ -11,7 +11,7 @@ import {
   mergeMap,
   scan,
   skipWhile,
-  groupBy
+  groupBy,
 } from 'rxjs/operators';
 import {
   addIndex,
@@ -34,17 +34,18 @@ import {
   chain,
   findLast,
   reverse,
-  values, zip
+  values,
+  zip,
 } from 'ramda';
 import { produce } from 'immer';
 import {
-  AggregationControl,
   aggReq,
   executeAggregations,
   getCurrentControl,
   toggleControl,
-  calculate as calcApi
+  calculate as calcApi,
 } from './sopsapi';
+import { BufferControlMode } from './aops';
 
 // const clicks$ = fromEvent(document, 'click').pipe(share());
 // const bufferedAndDebounced$ = clicks$.pipe(
@@ -61,12 +62,12 @@ const log = (...data: any[]) =>
 
 const rng = () => Math.ceil(Math.random() * 100);
 function stubAggAjax(queries: string[]) {
-  return of(queries.map(q => rng())).pipe(delay(backendLatency));
+  return of(queries.map((q) => rng())).pipe(delay(backendLatency));
 }
 
 const calc$ = new Subject(); // deprecated
 export const calculate = () => executeAggregations();
-const getManualCalc = () => getCurrentControl() === AggregationControl.Manual;
+const getManualCalc = () => getCurrentControl() === BufferControlMode.Manual;
 let manualCalc: boolean = getManualCalc();
 const toggleManualCalc = () => (manualCalc = !manualCalc);
 export function useCalculationControl() {
@@ -77,7 +78,7 @@ export function useCalculationControl() {
       toggleControl();
       manualCalc = getManualCalc();
       setEnabled(manualCalc);
-    }
+    },
   ];
 }
 
@@ -87,8 +88,8 @@ const res = req.pipe(
   log('Debounced'),
   map(uniq),
   log('Deduped'),
-  mergeMap(queries =>
-    stubAggAjax(queries).pipe(map(results => zipObj(queries, results)))
+  mergeMap((queries) =>
+    stubAggAjax(queries).pipe(map((results) => zipObj(queries, results)))
   ),
   log('Backend result'),
   share()
@@ -135,7 +136,7 @@ interface CalcUnit {
   evals: [string, (values: Dict<number>) => number][];
   result: Dict<number>;
   tags: Dict<string>;
-  setter: (produceFn :(self: CalcUnit) => CalcUnit | void) => void;
+  setter: (produceFn: (self: CalcUnit) => CalcUnit | void) => void;
 }
 interface CalcIndex<T> {
   aggs: string[];
@@ -150,7 +151,7 @@ export function useCalcByIndex<T>(
   icalcs: CalcIndex<T>[],
   defaultValue: T
 ): T[] {
-  const aggs = useAgg(icalcs.flatMap(b => b.aggs));
+  const aggs = useAgg(icalcs.flatMap((b) => b.aggs));
   const reduced = icalcs.reduce(
     (acc, b) => {
       const stop = acc.offset + b.aggs.length;
@@ -165,7 +166,7 @@ export function useCalcByIndex<T>(
 export function useCalcByMap<T>(mcalcs: CalcMap<T>[], defaultValue: T): T[] {
   const proj = mcalcs.map(({ aggs, evalFn }) => {
     const keys = Object.keys(aggs).sort(); // sort not needed for ES2020 and above, ES2015+ is tricky
-    const queries = keys.map(k => aggs[k]);
+    const queries = keys.map((k) => aggs[k]);
     const mesaEval = (values: number[]) =>
       evalFn(values.reduce((acc, v, i) => ({ ...acc, [keys[i]]: v }), {}));
     return { aggs: queries, evalFn: mesaEval };
@@ -191,35 +192,43 @@ export function useCalcUnits(units: CalcUnit[]) {
   // // console.log('valle', valle);
   // return valle;
   return useCalcByMap<Dict<number>>(
-    units.map(u => ({
+    units.map((u) => ({
       aggs: u.aggs,
-      evalFn: results =>
-        u.evals.reduce((acc, e) => ({ ...acc, [e[0]]: e[1](acc) }), results)
+      evalFn: (results) =>
+        u.evals.reduce((acc, e) => ({ ...acc, [e[0]]: e[1](acc) }), results),
     })),
     {}
   );
 }
 function setUnitSetter(units: CalcUnit[]) {
   units.forEach((u, i) => {
-      u.setter = pfn => {
-        units[i] = produce(u, pfn);
-      };
+    u.setter = (pfn) => {
+      units[i] = produce(u, pfn);
+    };
   });
   return units;
 }
 export function useCalcUnits2(units: CalcUnit[]) {
   const [state, setState] = useState<CalcUnit[]>([]);
   const set = (u: CalcUnit[]) => setState(setUnitSetter(u));
-  useEffect(function init() {
+  useEffect(
+    function init() {
       set(units);
-  }, [...units]);
-  useEffect(function calculateApi() {
-    // Sub to result
-    const sub = calcApi(
-      units.map(u => ({ queries: u.aggs, evals: u.evals }))
-    ).subscribe(x => set(zip(units, x).map(([u, r]) => ({ ...u, result: r }))));
-    // Clean up
-    return () => sub.unsubscribe();
-  }, [...units, manualCalc]);
+    },
+    [...units]
+  );
+  useEffect(
+    function calculateApi() {
+      // Sub to result
+      const sub = calcApi(
+        units.map((u) => ({ queries: u.aggs, evals: u.evals }))
+      ).subscribe((x) =>
+        set(zip(units, x).map(([u, r]) => ({ ...u, result: r })))
+      );
+      // Clean up
+      return () => sub.unsubscribe();
+    },
+    [...units, manualCalc]
+  );
   return state;
 }

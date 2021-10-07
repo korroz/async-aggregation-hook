@@ -29,7 +29,7 @@ import { map as rmap, values, zipObj } from 'ramda';
 interface BufferControl<T> {
   buffer: () => OperatorFunction<T, T[]>;
 }
-enum BufferControlMode {
+export enum BufferControlMode {
   Auto = 'auto',
   Manual = 'manual',
 }
@@ -146,9 +146,12 @@ const backend: AggregatorBackend = (qs) =>
   of(qs.map(rng)).pipe(delay(backendLatency));
 
 const request = new Subject<Observable<string>>();
-const control = new ModeBufferControl(request, debounceWait);
+export const aggregatorBufferControl = new ModeBufferControl(
+  request,
+  debounceWait
+);
 export const aggregatorService = new AggregatorService(
   request,
-  control,
+  aggregatorBufferControl,
   backend
 );
