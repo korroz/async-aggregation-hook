@@ -25,7 +25,9 @@ interface AggregationsRequest<T> {
   queries: string[];
   results: (results: number[]) => T;
 }
-function aggReqByIndex<T>(aggs: AggregationsRequest<T>[]): Observable<T[]> {
+export function aggReqByIndex<T>(
+  aggs: AggregationsRequest<T>[]
+): Observable<T[]> {
   return combineLatest(
     aggs.map((agg) => aggReq(agg.queries).pipe(map((r) => agg.results(r))))
   );
@@ -34,7 +36,7 @@ interface AggregationsRequestMap<T> {
   queries: Dict<string>;
   results: (results: Dict<number>) => T;
 }
-function aggReqByMap<T>(aggMaps: AggregationsRequestMap<T>[]): Observable<T[]> {
+export function aggReqByMap<T>(aggMaps: AggregationsRequestMap<T>[]): Observable<T[]> {
   return combineLatest(
     aggMaps.map((aggMap) =>
       aggMapReq(aggMap.queries).pipe(map((r) => aggMap.results(r)))

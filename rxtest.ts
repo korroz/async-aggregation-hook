@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { __, zip } from 'ramda';
+import { __, zip, values } from 'ramda';
 import { produce } from 'immer';
 import {
   aggReq,
@@ -7,6 +7,8 @@ import {
   getCurrentControl,
   toggleControl,
   calculate as calcApi,
+  aggReqByIndex,
+  aggReqByMap,
 } from './sopsapi';
 import { BufferControlMode } from './aops';
 
@@ -60,27 +62,30 @@ export function useCalcByIndex<T>(
   icalcs: CalcIndex<T>[],
   defaultValue: T
 ): T[] {
-  const aggs = useAgg(icalcs.flatMap((b) => b.aggs));
-  const reduced = icalcs.reduce(
-    (acc, b) => {
-      const stop = acc.offset + b.aggs.length;
-      const slice = aggs.slice(acc.offset, stop);
-      const result = slice.some(Number.isNaN) ? defaultValue : b.evalFn(slice);
-      return { offset: stop, results: [...acc.results, result] };
-    },
-    { offset: 0, results: [] }
+  const [results, setResults] = useState<T[]>(() =>
+    icalcs.map(() => defaultValue)
   );
-  return reduced.results;
+  const aggs = icalcs.flatMap((c) => c.aggs);
+  useEffect(() => {
+    const sub = aggReqByIndex<T>(
+      icalcs.map((c) => ({ queries: c.aggs, results: c.evalFn }))
+    ).subscribe(setResults);
+    return () => sub.unsubscribe();
+  }, aggs);
+  return results;
 }
 export function useCalcByMap<T>(mcalcs: CalcMap<T>[], defaultValue: T): T[] {
-  const proj = mcalcs.map(({ aggs, evalFn }) => {
-    const keys = Object.keys(aggs).sort(); // sort not needed for ES2020 and above, ES2015+ is tricky
-    const queries = keys.map((k) => aggs[k]);
-    const mesaEval = (values: number[]) =>
-      evalFn(values.reduce((acc, v, i) => ({ ...acc, [keys[i]]: v }), {}));
-    return { aggs: queries, evalFn: mesaEval };
-  });
-  return useCalcByIndex<T>(proj, defaultValue);
+  const [results, setResults] = useState<T[]>(() =>
+    mcalcs.map(() => defaultValue)
+  );
+  const aggs = mcalcs.flatMap((c) => values(c.aggs));
+  useEffect(() => {
+    const sub = aggReqByMap(
+      mcalcs.map((c) => ({ queries: c.aggs, results: c.evalFn }))
+    ).subscribe(setResults);
+    return () => sub.unsubscribe();
+  }, aggs);
+  return results;
 }
 function setUnitSetter(units: CalcUnit[]) {
   units.forEach((u, i) => {
