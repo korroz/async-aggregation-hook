@@ -1,6 +1,7 @@
 import { Observable, combineLatest } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { aggregatorService } from './aops';
+import { agg, aggregatorService } from './aops';
+import { map as rmap } from 'ramda';
 
 //+req: -a-a-a-b-c---------
 //-req: --a-----b----------
@@ -15,10 +16,10 @@ export const getCurrentControl = () => aggregatorService.control.mode;
 export const toggleControl = () => aggregatorService.control.cycleMode();
 
 export function aggReq(queries: string[]): Observable<number[]> {
-  return aggregatorService.aggregate(queries);
+  return aggregatorService.aggregate(rmap(agg, queries));
 }
 function aggMapReq(queryMap: Dict<string>): Observable<Dict<number>> {
-  return aggregatorService.aggregateObj(queryMap);
+  return aggregatorService.aggregateObj(rmap(agg, queryMap));
 }
 
 interface AggregationsRequest<T> {
@@ -36,7 +37,9 @@ interface AggregationsRequestMap<T> {
   queries: Dict<string>;
   results: (results: Dict<number>) => T;
 }
-export function aggReqByMap<T>(aggMaps: AggregationsRequestMap<T>[]): Observable<T[]> {
+export function aggReqByMap<T>(
+  aggMaps: AggregationsRequestMap<T>[]
+): Observable<T[]> {
   return combineLatest(
     aggMaps.map((aggMap) =>
       aggMapReq(aggMap.queries).pipe(map((r) => aggMap.results(r)))

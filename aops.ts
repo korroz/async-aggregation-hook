@@ -70,21 +70,40 @@ class ModeBufferControl<T> implements BufferControl<T> {
   }
 }
 
+interface Agg {
+  query: string;
+  hint: string;
+}
+export function agg(query: string, hint?: string): Agg {
+  hint = hint || 'a';
+  return { query, hint };
+}
+function fullAgg(agg: Agg): string {
+  return `QUERY ${agg.query} HINT ${agg.hint}`;
+}
+type FullAggQuery = string;
+interface CompiledAgg extends Agg {
+  full: FullAggQuery;
+}
+function compileAgg(agg: Agg): CompiledAgg {
+  return { ...agg, full: fullAgg(agg) };
+}
+
 interface Aggregator {
-  aggregate: (queries: string[]) => Observable<number[]>;
+  aggregate: (queries: Agg[]) => Observable<number[]>;
   aggregateObj: (
-    queries: Record<string, string>
+    queries: Record<string, Agg>
   ) => Observable<Record<string, number>>;
 }
 
 type AggregatorBackend = (
-  queries: string[]
-) => Observable<Record<string, number>>;
-class AggregatorService<T extends BufferControl<Observable<string>>>
+  queries: CompiledAgg[]
+) => Observable<Record<FullAggQuery, number>>;
+class AggregatorService<T extends BufferControl<Observable<CompiledAgg>>>
   implements Aggregator
 {
-  private response$: Observable<Record<string, number>>;
-  private readonly request$ = new Subject<Observable<string>>();
+  private response$: Observable<Record<FullAggQuery, number>>;
+  private readonly request$ = new Subject<Observable<CompiledAgg>>();
   constructor(public readonly control: T, backend: AggregatorBackend) {
     this.response$ = this.request$.pipe(
       control.buffer(),
@@ -92,7 +111,7 @@ class AggregatorService<T extends BufferControl<Observable<string>>>
         from(rs).pipe(
           concatAll(),
           //log('Request'),
-          distinct(),
+          distinct((a) => a.full),
           toArray(),
           log('Deduped'),
           mergeMap(backend)
@@ -103,33 +122,36 @@ class AggregatorService<T extends BufferControl<Observable<string>>>
     );
   }
 
-  private result = (query: string) => {
+  private result = (query: CompiledAgg) => {
     return this.response$.pipe(
-      map((r) => r[query]),
+      map((r) => r[query.full]),
       filter((r) => r !== undefined)
     );
   };
-  private request(queries: string[], subscription: Subscription) {
+  private request(queries: CompiledAgg[], subscription: Subscription) {
     this.request$.next(iif(() => subscription.closed, EMPTY, from(queries)));
   }
 
   // Aggregator interface signature
-  aggregate(queries: string[]) {
+  aggregate(queries: Agg[]) {
+    const caggs = rmap(compileAgg, queries);
     return new Observable<number[]>((subscriber) => {
-      const sub = combineLatest(rmap(this.result, queries)).subscribe(
-        subscriber
-      );
-      this.request(queries, sub);
+      const sub = combineLatest(rmap(this.result, caggs)).subscribe(subscriber);
+      this.request(caggs, sub);
     });
   }
-  aggregateObj(queries: Record<string, string>) {
+  aggregateObj(queries: Record<string, Agg>) {
+    const caggs = rmap<Record<string, Agg>, Record<string, CompiledAgg>>(
+      compileAgg,
+      queries
+    );
+    const oaggs = rmap<
+      Record<string, CompiledAgg>,
+      Record<string, Observable<number>>
+    >(this.result, caggs);
     return new Observable<Record<string, number>>((subscriber) => {
-      const doom = rmap<
-        Record<string, string>,
-        Record<string, Observable<number>>
-      >(this.result, queries);
-      const sub = combineLatest(doom).subscribe(subscriber);
-      this.request(values(queries), sub);
+      const sub = combineLatest(oaggs).subscribe(subscriber);
+      this.request(values(queries).map(compileAgg), sub);
     });
   }
 }
@@ -144,11 +166,16 @@ const debounceWait = 500,
 const rng = () => Math.ceil(Math.random() * 100);
 const backend: AggregatorBackend = (qs) =>
   of(qs.map(rng)).pipe(
-    map((r) => zipObj(qs, r)),
+    map((r) =>
+      zipObj(
+        qs.map((q) => q.full),
+        r
+      )
+    ),
     delay(backendLatency)
   );
 
-const aggregatorBufferControl = new ModeBufferControl<Observable<string>>(
+const aggregatorBufferControl = new ModeBufferControl<Observable<CompiledAgg>>(
   debounceWait
 );
 export const aggregatorService = new AggregatorService(
