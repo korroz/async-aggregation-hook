@@ -34,32 +34,33 @@ export enum BufferControlMode {
   Manual = 'manual',
 }
 class ModeBufferControl<T> implements BufferControl<T> {
-  private _mode = BufferControlMode.Auto;
+  private _mode = new BehaviorSubject<BufferControlMode>(
+    BufferControlMode.Auto
+  );
   private manualControl = new Subject<void>();
-  private debounceControl: Observable<T>;
-  private control: BehaviorSubject<Observable<unknown>>;
 
-  constructor(source$: Observable<T>, debounce: number) {
-    this.debounceControl = source$.pipe(debounceTime(debounce));
-    this.control = new BehaviorSubject(this.debounceControl);
-  }
+  constructor(private time: number) {}
   // BufferControl<T> signature
-  buffer() {
-    return buffer<T>(this.control.pipe(switchAll()));
+  buffer(): OperatorFunction<T, T[]> {
+    return (source: Observable<T>) => {
+      const deb = source.pipe(debounceTime(this.time));
+      const ctrl = this._mode.pipe(
+        map((mode) =>
+          mode === BufferControlMode.Auto ? deb : this.manualControl
+        ),
+        switchAll()
+      );
+      return source.pipe(buffer<T>(ctrl));
+    };
   }
   flush(): void {
     this.manualControl.next();
   }
   get mode(): BufferControlMode {
-    return this._mode;
+    return this._mode.value;
   }
   set mode(mode: BufferControlMode) {
-    this._mode = mode;
-    this.control.next(
-      mode === BufferControlMode.Auto
-        ? this.debounceControl
-        : this.manualControl
-    );
+    this._mode.next(mode);
   }
   cycleMode(): BufferControlMode {
     return (this.mode =
@@ -76,17 +77,16 @@ interface Aggregator {
   ) => Observable<Record<string, number>>;
 }
 
-type AggregatorBackend = (queries: string[]) => Observable<number[]>;
+type AggregatorBackend = (
+  queries: string[]
+) => Observable<Record<string, number>>;
 class AggregatorService<T extends BufferControl<Observable<string>>>
   implements Aggregator
 {
   private response$: Observable<Record<string, number>>;
-  constructor(
-    private readonly request$: Subject<Observable<string>>,
-    public readonly control: T,
-    backend: AggregatorBackend
-  ) {
-    this.response$ = request$.pipe(
+  private readonly request$ = new Subject<Observable<string>>();
+  constructor(public readonly control: T, backend: AggregatorBackend) {
+    this.response$ = this.request$.pipe(
       control.buffer(),
       mergeMap((rs) =>
         from(rs).pipe(
@@ -95,9 +95,7 @@ class AggregatorService<T extends BufferControl<Observable<string>>>
           distinct(),
           toArray(),
           log('Deduped'),
-          mergeMap((queries) =>
-            backend(queries).pipe(map((results) => zipObj(queries, results)))
-          )
+          mergeMap(backend)
         )
       ),
       log('Backend result'),
@@ -145,15 +143,15 @@ const debounceWait = 500,
 
 const rng = () => Math.ceil(Math.random() * 100);
 const backend: AggregatorBackend = (qs) =>
-  of(qs.map(rng)).pipe(delay(backendLatency));
+  of(qs.map(rng)).pipe(
+    map((r) => zipObj(qs, r)),
+    delay(backendLatency)
+  );
 
-const request = new Subject<Observable<string>>();
-export const aggregatorBufferControl = new ModeBufferControl(
-  request,
+const aggregatorBufferControl = new ModeBufferControl<Observable<string>>(
   debounceWait
 );
 export const aggregatorService = new AggregatorService(
-  request,
   aggregatorBufferControl,
   backend
 );
