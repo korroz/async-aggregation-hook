@@ -83,7 +83,7 @@ function DoubleAggDisplay({ queries }: { queries: [string, string] }) {
     </div>
   );
 }
-const calcUnits = [
+const calcUnits: Parameters<typeof useCalcUnits2>[0] = [
   {
     aggs: { cat: 'cat', sister: 'sister' },
     evals: [
@@ -186,7 +186,7 @@ function MyFrequencyComponent() {
   return <div>{(count / base) * 100} %</div>;
 }
 function aggHelper(agg: string, preds: string[]): string {
-  return ['AGGREGATION ', agg, ...preds.flatMap((p) => ['PREDICATE ', p])];
+  return ['AGGREGATION ', agg, ...preds.flatMap((p) => ['PREDICATE ', p])].join('');
 }
 function freqCalc({ count, base }: { count: string; base: string }) {
   return {

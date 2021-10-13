@@ -3,24 +3,22 @@ import { __, zip, values } from 'ramda';
 import { produce } from 'immer';
 import {
   aggReq,
-  executeAggregations,
-  getCurrentControl,
-  toggleControl,
   calculate as calcApi,
   aggReqByIndex,
   aggReqByMap,
 } from './sopsapi';
-import { BufferControlMode } from './aops';
+import { aggregatorService, BufferControlMode } from './aops';
 
-export const calculate = () => executeAggregations();
-const getManualCalc = () => getCurrentControl() === BufferControlMode.Manual;
+export const calculate = () => aggregatorService.control.flush();
+const getManualCalc = () =>
+  aggregatorService.control.mode === BufferControlMode.Manual;
 let manualCalc: boolean = getManualCalc();
-export function useCalculationControl() {
+export function useCalculationControl(): [boolean, () => void] {
   const [enabled, setEnabled] = useState(manualCalc);
   return [
     manualCalc,
     () => {
-      toggleControl();
+      aggregatorService.control.cycleMode();
       manualCalc = getManualCalc();
       setEnabled(manualCalc);
     },
@@ -95,7 +93,7 @@ function setUnitSetter(units: CalcUnit[]) {
   });
   return units;
 }
-export function useCalcUnits2(units: CalcUnit[]) {
+export function useCalcUnits2(units: Pick<CalcUnit, 'aggs' | 'evals'>[]) {
   const [state, setState] = useState<CalcUnit[]>([]);
   const set = (u: CalcUnit[]) => setState(setUnitSetter(u));
   useEffect(

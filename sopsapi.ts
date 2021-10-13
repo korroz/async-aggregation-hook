@@ -1,6 +1,6 @@
 import { Observable, combineLatest } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { agg, aggregatorService } from './aops';
+import { Agg, agg, aggregatorService } from './aops';
 import { map as rmap } from 'ramda';
 
 //+req: -a-a-a-b-c---------
@@ -11,15 +11,13 @@ import { map as rmap } from 'ramda';
 // res: ----------------ac-
 type Dict<T> = { [key: string]: T };
 
-export const executeAggregations = () => aggregatorService.control.flush();
-export const getCurrentControl = () => aggregatorService.control.mode;
-export const toggleControl = () => aggregatorService.control.cycleMode();
-
 export function aggReq(queries: string[]): Observable<number[]> {
   return aggregatorService.aggregate(rmap(agg, queries));
 }
 function aggMapReq(queryMap: Dict<string>): Observable<Dict<number>> {
-  return aggregatorService.aggregateObj(rmap(agg, queryMap));
+  return aggregatorService.aggregate(
+    rmap<Dict<string>, Dict<Agg>>(agg, queryMap)
+  );
 }
 
 interface AggregationsRequest<T> {
