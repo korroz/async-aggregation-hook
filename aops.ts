@@ -26,14 +26,14 @@ import {
 } from 'rxjs/operators';
 import { map as rmap, values, zipObj } from 'ramda';
 
-interface BufferControl<T> {
-  buffer: () => OperatorFunction<T, T[]>;
+interface BufferControl {
+  buffer: <T>() => OperatorFunction<T, T[]>;
 }
 export enum BufferControlMode {
   Auto = 'auto',
   Manual = 'manual',
 }
-class ModeBufferControl<T> implements BufferControl<T> {
+class ModeBufferControl<T> implements BufferControl {
   private _mode = new BehaviorSubject<BufferControlMode>(
     BufferControlMode.Auto
   );
@@ -41,7 +41,7 @@ class ModeBufferControl<T> implements BufferControl<T> {
 
   constructor(private time: number) {}
   // BufferControl<T> signature
-  buffer(): OperatorFunction<T, T[]> {
+  buffer<T>(): OperatorFunction<T, T[]> {
     return (source: Observable<T>) => {
       const deb = source.pipe(debounceTime(this.time));
       const ctrl = this._mode.pipe(
@@ -85,31 +85,30 @@ interface AggQuery extends Partial<Agg> {
   full: AggQueryString;
 }
 function compileAgg(q: AggOrQuery): AggQuery {
-  if (isAggQuery(q))
-    return q;
-  else if (typeof q === 'string')
-    return <AggQuery>{ full: q };
-  else
-    return <AggQuery>{ ...q, full: fullAgg(q) };
+  if (isAggQuery(q)) return q;
+  else if (typeof q === 'string') return <AggQuery>{ full: q };
+  else return <AggQuery>{ ...q, full: fullAgg(q) };
 }
-function isAggQuery(query: AggOrQuery) : query is AggQuery {
+function isAggQuery(query: AggOrQuery): query is AggQuery {
   return (query as AggQuery).full !== undefined;
 }
 type AggQueryString = string;
 type AggOrQuery = Agg | AggQuery | AggQueryString;
 type ArrayOrRecord<T> = T[] | Record<string, T>;
-type NumberResult<T extends ArrayOrRecord<AggOrQuery>> = T extends any[] ? number[] : Record<AggQueryString, number>;
+type NumberResult<T extends ArrayOrRecord<AggOrQuery>> = T extends any[]
+  ? number[]
+  : Record<AggQueryString, number>;
 
 interface Aggregator {
-  aggregate: <T extends ArrayOrRecord<AggOrQuery>>(queries: T) => Observable<NumberResult<T>>;
+  aggregate: <T extends ArrayOrRecord<AggOrQuery>>(
+    queries: T
+  ) => Observable<NumberResult<T>>;
 }
 
 type AggregatorBackend = (
   queries: AggQuery[]
 ) => Observable<Record<AggQueryString, number>>;
-class AggregatorService<T extends BufferControl<Observable<AggQuery>>>
-  implements Aggregator
-{
+class AggregatorService<T extends BufferControl> implements Aggregator {
   private response$: Observable<Record<AggQueryString, number>>;
   private readonly request$ = new Subject<Observable<AggQuery>>();
   constructor(public readonly control: T, backend: AggregatorBackend) {
@@ -141,24 +140,34 @@ class AggregatorService<T extends BufferControl<Observable<AggQuery>>>
   }
 
   // Aggregator interface signature
-  aggregate(queries: AggQueryString[]) : Observable<number[]>;
-  aggregate(queries: Agg[]) : Observable<number[]>;
-  aggregate(queries: Record<string, AggQueryString>) : Observable<Record<string, number>>;
-  aggregate(queries: Record<string, Agg>) : Observable<Record<string, number>>;
-  aggregate<Q extends ArrayOrRecord<AggOrQuery>>(queries: Q) : Observable<NumberResult<Q>>;
-  aggregate<Q extends ArrayOrRecord<AggOrQuery>>(queries: Q) : Observable<NumberResult<Q>> {
+  aggregate(queries: AggQueryString[]): Observable<number[]>;
+  aggregate(queries: Agg[]): Observable<number[]>;
+  aggregate(
+    queries: Record<string, AggQueryString>
+  ): Observable<Record<string, number>>;
+  aggregate(queries: Record<string, Agg>): Observable<Record<string, number>>;
+  aggregate<Q extends ArrayOrRecord<AggOrQuery>>(
+    queries: Q
+  ): Observable<NumberResult<Q>>;
+  aggregate<Q extends ArrayOrRecord<AggOrQuery>>(
+    queries: Q
+  ): Observable<NumberResult<Q>> {
     if (Array.isArray(queries)) {
       const doom = queries.map(compileAgg);
       return this.aggregateArr(doom) as Observable<NumberResult<Q>>;
-    }
-    else {
-      const doom = rmap<Record<string, AggOrQuery>, Record<string, AggQuery>>(compileAgg, queries);
+    } else {
+      const doom = rmap<Record<string, AggOrQuery>, Record<string, AggQuery>>(
+        compileAgg,
+        queries
+      );
       return this.aggregateObj(doom) as Observable<NumberResult<Q>>;
     }
   }
-  private aggregateArr(queries: AggQuery[]) : Observable<number[]> {
+  private aggregateArr(queries: AggQuery[]): Observable<number[]> {
     return new Observable<number[]>((subscriber) => {
-      const sub = combineLatest(rmap(this.result, queries)).subscribe(subscriber);
+      const sub = combineLatest(rmap(this.result, queries)).subscribe(
+        subscriber
+      );
       this.request(queries, sub);
     });
   }
